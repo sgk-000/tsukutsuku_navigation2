@@ -4,3 +4,6 @@
 [submodule "spatio_temporal_voxel_layer"]
 	path = spatio_temporal_voxel_layer
 	url = https://github.com/SteveMacenski/spatio_temporal_voxel_layer.git
+[submodule "Groot"]
+	path = Groot
+	url = https://github.com/BehaviorTree/Groot.git
