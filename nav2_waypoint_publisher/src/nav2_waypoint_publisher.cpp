@@ -1,10 +1,20 @@
-#include "waypoint_publisher/waypoint_publisher.hpp"  // include local header
+#include "nav2_waypoint_publisher/nav2_waypoint_publisher.hpp"  // include local header
 
 WayPointPublisher::WayPointPublisher() :
-  Node("waypoint_publisher"), id_(0)
+  rclcpp::Node("nav2_waypoint_publisher"), id_(0)
 {
   csv_file_ = declare_parameter<std::string>("csv_file", "sample.csv");
   waypoint_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("waypoints", rclcpp::QoS{10});
+  nav_through_poses_action_client_  = rclcpp_action::create_client<nav2_msgs::action::NavigateThroughPoses>(this, "navigate_through_poses");
+
+  auto is_action_server_ready =
+  nav_through_poses_action_client_->wait_for_action_server(std::chrono::seconds(5));
+  if (!is_action_server_ready) {
+    RCLCPP_ERROR(
+      this->get_logger(), "navigate_through_poses action server is not available."
+      " Is the initial pose set?");
+    return;
+  }
   publishWaypointsFromCSV(csv_file_);
 }
 
@@ -40,10 +50,23 @@ void WayPointPublisher::publishWaypointsFromCSV(std::string csv_file)
     origin_marker.color.b = 0.0f;
     origin_marker.color.a = 1.0f;
 
+    nav2_msgs::action::NavigateThroughPoses::Goal nav_through_poses_goal;
+
     while (getline(ifs, line)) {
         std::vector<std::string> strvec = getCSVLine(line, ',');
+        geometry_msgs::msg::PoseStamped goal_msg;
         visualization_msgs::msg::Marker marker;
         marker = origin_marker;
+        goal_msg.header.stamp = this->now();
+        goal_msg.header.frame_id = "map";
+
+        goal_msg.pose.position.x = std::stod(strvec.at(0));
+        goal_msg.pose.position.y = std::stod(strvec.at(1));
+        goal_msg.pose.orientation.x = std::stod(strvec.at(3));
+        goal_msg.pose.orientation.y = std::stod(strvec.at(4));
+        goal_msg.pose.orientation.w = std::stod(strvec.at(5));
+        goal_msg.pose.orientation.z = std::stod(strvec.at(6));
+
         marker.pose.position.x = std::stod(strvec.at(0));
         marker.pose.position.y = std::stod(strvec.at(1));
         marker.pose.position.z = std::stod(strvec.at(2));
@@ -58,8 +81,35 @@ void WayPointPublisher::publishWaypointsFromCSV(std::string csv_file)
         std::cout << "y: " << std::stod(strvec.at(4)) << std::endl;
         std::cout << "z: " << std::stod(strvec.at(5)) << std::endl;
         std::cout << "w: " << std::stod(strvec.at(6)) << std::endl;
+        nav_through_poses_goal.poses.push_back(goal_msg);
         marker_array.markers.push_back(marker);
     }
-        std::cout << "publish" << std::endl;
-        waypoint_pub_->publish(marker_array);
+
+    auto send_goal_options =
+      rclcpp_action::Client<nav2_msgs::action::NavigateThroughPoses>::SendGoalOptions();
+    send_goal_options.result_callback = [this](auto) {
+        nav_through_poses_goal_handle_.reset();
+      };
+  
+    std::chrono::milliseconds server_timeout(30);
+    auto future_goal_handle =
+      nav_through_poses_action_client_->async_send_goal(nav_through_poses_goal, send_goal_options);
+    if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future_goal_handle, server_timeout) !=
+      rclcpp::FutureReturnCode::SUCCESS)
+    {
+      RCLCPP_ERROR(this->get_logger(), "Send goal call failed");
+      return;
+    }
+  
+    // Get the goal handle and save so that we can check on completion in the timer callback
+    nav_through_poses_goal_handle_ = future_goal_handle.get();
+    if (!nav_through_poses_goal_handle_) {
+      RCLCPP_ERROR(this->get_logger(), "Goal was rejected by server");
+      return;
+    }
+    RCLCPP_INFO(
+    this->get_logger(), "Sending a path of %zu waypoints:",
+    nav_through_poses_goal.poses.size());
+    waypoint_pub_->publish(marker_array);
+
 }

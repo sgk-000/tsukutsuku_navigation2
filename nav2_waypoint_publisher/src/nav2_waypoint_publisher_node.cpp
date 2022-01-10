@@ -1,4 +1,4 @@
-#include "waypoint_publisher/waypoint_publisher.hpp"  // include local header
+#include "nav2_waypoint_publisher/nav2_waypoint_publisher.hpp"  // include local header
 
 int main(int argc, char** argv){
 
