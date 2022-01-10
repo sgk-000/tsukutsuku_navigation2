@@ -1,0 +1,3 @@
+[submodule "groot"]
+	path = groot
+	url = https://github.com/BehaviorTree/Groot.git
