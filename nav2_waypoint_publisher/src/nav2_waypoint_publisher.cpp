@@ -4,9 +4,10 @@ WayPointPublisher::WayPointPublisher() : rclcpp::Node("nav2_waypoint_publisher")
 {
   declareParams();
   getParams();
-    rclcpp::QoS latched_qos{1};
+  rclcpp::QoS latched_qos{ 1 };
   latched_qos.transient_local();
   waypoint_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("waypoints", latched_qos);
+  waypoint_text_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("waypoints_index", latched_qos);
   if (follow_type_ == 0)
   {
     nav_through_poses_action_client_ =
@@ -45,6 +46,11 @@ void WayPointPublisher::declareParams()
   waypoint_marker_color_g_ = declare_parameter<float>("waypoint_marker_color_g", 0.0f);
   waypoint_marker_color_b_ = declare_parameter<float>("waypoint_marker_color_b", 0.0f);
   waypoint_marker_color_a_ = declare_parameter<float>("waypoint_marker_color_a", 1.0f);
+  waypoint_text_marker_scale_ = declare_parameter<float>("waypoint_text_marker_scale", 0.5);
+  waypoint_text_marker_color_r_ = declare_parameter<float>("waypoint_text_marker_color_r", 1.0f);
+  waypoint_text_marker_color_g_ = declare_parameter<float>("waypoint_text_marker_color_g", 0.0f);
+  waypoint_text_marker_color_b_ = declare_parameter<float>("waypoint_text_marker_color_b", 0.0f);
+  waypoint_text_marker_color_a_ = declare_parameter<float>("waypoint_text_marker_color_a", 1.0f);
 }
 
 void WayPointPublisher::getParams()
@@ -56,8 +62,15 @@ void WayPointPublisher::getParams()
   bool GotWayPointMarkerColorG = this->get_parameter("waypoint_marker_color_g", waypoint_marker_color_g_);
   bool GotWayPointMarkerColorB = this->get_parameter("waypoint_marker_color_b", waypoint_marker_color_b_);
   bool GotWayPointMarkerColorA = this->get_parameter("waypoint_marker_color_a", waypoint_marker_color_a_);
+  bool GotWayPointTextMarkerScale = this->get_parameter("waypoint_text_marker_scale", waypoint_text_marker_scale_);
+  bool GotWayPointTextMarkerColorR = this->get_parameter("waypoint_text_marker_color_r", waypoint_text_marker_color_r_);
+  bool GotWayPointTextMarkerColorG = this->get_parameter("waypoint_text_marker_color_g", waypoint_text_marker_color_g_);
+  bool GotWayPointTextMarkerColorB = this->get_parameter("waypoint_text_marker_color_b", waypoint_text_marker_color_b_);
+  bool GotWayPointTextMarkerColorA = this->get_parameter("waypoint_text_marker_color_a", waypoint_text_marker_color_a_);
   bool pass = checkParameters({ GotFllowType, GotCSVFile, GotWayPointMarkerScale, GotWayPointMarkerColorR,
-                                GotWayPointMarkerColorG, GotWayPointMarkerColorB, GotWayPointMarkerColorA });
+                                GotWayPointMarkerColorG, GotWayPointMarkerColorB, GotWayPointMarkerColorA,
+                                GotWayPointTextMarkerScale, GotWayPointTextMarkerColorR, GotWayPointTextMarkerColorG,
+                                GotWayPointTextMarkerColorB, GotWayPointTextMarkerColorA });
   if (pass)
   {
     RCLCPP_WARN(get_logger(), "Could not get type paramters. Use default parameters");
@@ -101,22 +114,38 @@ void WayPointPublisher::publishWaypointsFromCSV(std::string csv_file)
 {
   std::ifstream ifs(csv_file);
   std::string line;
-  visualization_msgs::msg::MarkerArray marker_array;
+  visualization_msgs::msg::MarkerArray marker_array, text_marker_array;
   visualization_msgs::msg::Marker origin_marker;
+  visualization_msgs::msg::Marker origin_text_marker;
   origin_marker.header.frame_id = "map";
   origin_marker.header.stamp = this->now();
-  origin_marker.ns = "waypoints";
+  origin_marker.ns = "waypoints_marker";
   origin_marker.id = 0;
   origin_marker.type = visualization_msgs::msg::Marker::ARROW;
   origin_marker.action = visualization_msgs::msg::Marker::ADD;
-  origin_marker.lifetime = rclcpp::Duration(0); //forever
-  origin_marker.scale.x = waypoint_marker_scale_;
+  origin_marker.lifetime = rclcpp::Duration(0);  // forever
+  origin_marker.scale.x = waypoint_marker_scale_ * 1.5;
   origin_marker.scale.y = waypoint_marker_scale_;
   origin_marker.scale.z = waypoint_marker_scale_;
   origin_marker.color.r = waypoint_marker_color_r_;
   origin_marker.color.g = waypoint_marker_color_g_;
   origin_marker.color.b = waypoint_marker_color_b_;
   origin_marker.color.a = waypoint_marker_color_a_;
+
+  origin_text_marker.header.frame_id = "map";
+  origin_text_marker.header.stamp = this->now();
+  origin_text_marker.ns = "waypoints_text_marker";
+  origin_text_marker.id = 0;
+  origin_text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+  origin_text_marker.action = visualization_msgs::msg::Marker::ADD;
+  origin_text_marker.lifetime = rclcpp::Duration(0);  // forever
+  origin_text_marker.scale.x = waypoint_text_marker_scale_;
+  origin_text_marker.scale.y = waypoint_text_marker_scale_;
+  origin_text_marker.scale.z = waypoint_text_marker_scale_;
+  origin_text_marker.color.r = waypoint_text_marker_color_r_;
+  origin_text_marker.color.g = waypoint_text_marker_color_g_;
+  origin_text_marker.color.b = waypoint_text_marker_color_b_;
+  origin_text_marker.color.a = waypoint_text_marker_color_a_;
 
   nav2_msgs::action::NavigateThroughPoses::Goal nav_through_poses_goal;
   nav2_msgs::action::FollowWaypoints::Goal follow_waypoints_goal;
@@ -125,8 +154,9 @@ void WayPointPublisher::publishWaypointsFromCSV(std::string csv_file)
   {
     std::vector<std::string> strvec = getCSVLine(line, ',');
     geometry_msgs::msg::PoseStamped goal_msg;
-    visualization_msgs::msg::Marker marker;
+    visualization_msgs::msg::Marker marker, text_marker;
     marker = origin_marker;
+    text_marker = origin_text_marker;
     goal_msg.header.stamp = this->now();
     goal_msg.header.frame_id = "map";
 
@@ -145,8 +175,19 @@ void WayPointPublisher::publishWaypointsFromCSV(std::string csv_file)
     marker.pose.orientation.y = std::stod(strvec.at(4));
     marker.pose.orientation.z = std::stod(strvec.at(5));
     marker.pose.orientation.w = std::stod(strvec.at(6));
-    std::cout << "-------------------------------------" << std:: endl;
-    std::cout << "waypoint ID: " << marker.id << std:: endl;
+
+    text_marker.id = id_;
+    text_marker.text = std::to_string(id_);
+    text_marker.pose.position.x = std::stod(strvec.at(0));
+    text_marker.pose.position.y = std::stod(strvec.at(1));
+    text_marker.pose.position.z = std::stod(strvec.at(2));
+    text_marker.pose.orientation.x = std::stod(strvec.at(3));
+    text_marker.pose.orientation.y = std::stod(strvec.at(4));
+    text_marker.pose.orientation.z = std::stod(strvec.at(5));
+    text_marker.pose.orientation.w = std::stod(strvec.at(6));
+
+    std::cout << "-------------------------------------" << std::endl;
+    std::cout << "waypoint ID: " << marker.id << std::endl;
     std::cout << "trans x: " << std::stod(strvec.at(0)) << std::endl;
     std::cout << "trans y: " << std::stod(strvec.at(1)) << std::endl;
     std::cout << "trans z: " << std::stod(strvec.at(2)) << std::endl;
@@ -160,6 +201,7 @@ void WayPointPublisher::publishWaypointsFromCSV(std::string csv_file)
       follow_waypoints_goal.poses.push_back(goal_msg);
 
     marker_array.markers.push_back(marker);
+    text_marker_array.markers.push_back(text_marker);
   }
 
   // send goal
@@ -184,7 +226,8 @@ void WayPointPublisher::publishWaypointsFromCSV(std::string csv_file)
       RCLCPP_ERROR(this->get_logger(), "Goal was rejected by server");
       return;
     }
-    RCLCPP_INFO(this->get_logger(), "[nav_through_poses]: Sending a path of %zu waypoints:", nav_through_poses_goal.poses.size());
+    RCLCPP_INFO(this->get_logger(),
+                "[nav_through_poses]: Sending a path of %zu waypoints:", nav_through_poses_goal.poses.size());
   }
 
   if (follow_type_ == 1)
@@ -208,9 +251,11 @@ void WayPointPublisher::publishWaypointsFromCSV(std::string csv_file)
       RCLCPP_ERROR(this->get_logger(), "Goal was rejected by server");
       return;
     }
-    RCLCPP_INFO(this->get_logger(), "[follow_waypoints]: Sending a path of %zu waypoints:", follow_waypoints_goal.poses.size());
+    RCLCPP_INFO(this->get_logger(),
+                "[follow_waypoints]: Sending a path of %zu waypoints:", follow_waypoints_goal.poses.size());
   }
 
-  //Publish waypoints markers
+  // Publish waypoints markers
   waypoint_pub_->publish(marker_array);
+  waypoint_text_pub_->publish(text_marker_array);
 }

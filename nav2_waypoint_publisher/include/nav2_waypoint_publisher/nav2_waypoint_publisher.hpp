@@ -28,6 +28,7 @@ private:
 
 private:
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr waypoint_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr waypoint_text_pub_;
   // rclcpp::Clock ros_clock(RCL_ROS_TIME);
   int id_;
   std::string csv_file_;
@@ -42,6 +43,12 @@ private:
   float waypoint_marker_color_g_;
   float waypoint_marker_color_b_;
   float waypoint_marker_color_a_;
+
+  float waypoint_text_marker_scale_;
+  float waypoint_text_marker_color_r_;
+  float waypoint_text_marker_color_g_;
+  float waypoint_text_marker_color_b_;
+  float waypoint_text_marker_color_a_;
 };
 
 #endif
